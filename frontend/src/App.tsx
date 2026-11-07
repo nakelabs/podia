@@ -5,7 +5,6 @@ import { FilterRibbon, TRACK_OPTIONS } from "./components/FilterRibbon";
 import { Navbar } from "./components/Navbar";
 import { ProjectCard } from "./components/ProjectCard";
 import { ProjectDrawer } from "./components/ProjectDrawer";
-import { MOCK_PROJECTS } from "./mockData";
 import { Project, ProjectCreatePayload } from "./types";
 
 // Define initial form state for submitting a new hackathon winning build
@@ -29,11 +28,11 @@ const INITIAL_SUBMIT_FORM: ProjectCreatePayload = {
   hackathon_region: "Global",
 };
 
-// Coordinate active search, filter state, project drawer, command palette, and submission modal
+// Coordinate live API data, search, filter state, project drawer, command palette, and submission modal
 export const App: React.FC = () => {
-  const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isOffline, setIsOffline] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Active search & filter states
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -47,22 +46,28 @@ export const App: React.FC = () => {
   const [isCommandOpen, setIsCommandOpen] = useState<boolean>(false);
   const [isSubmitOpen, setIsSubmitOpen] = useState<boolean>(false);
   const [submitForm, setSubmitForm] = useState<ProjectCreatePayload>(INITIAL_SUBMIT_FORM);
-  const [stackInput, setStackInput] = useState<string>("FastAPI, React, TypeScript");
+  const [stackInput, setStackInput] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Load projects matching active filters from backend API or offline mockData fallback
+  // Load projects matching active filters from the hosted Render FastAPI backend
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
-    const result = await fetchProjects({
-      q: searchQuery,
-      track: selectedTrack,
-      placement: selectedPlacement,
-      region: selectedRegion,
-      tech_stack: selectedStack,
-    });
-    setProjects(result.projects);
-    setIsOffline(result.isOffline);
-    setIsLoading(false);
+    setErrorMessage(null);
+    try {
+      const data = await fetchProjects({
+        q: searchQuery,
+        track: selectedTrack,
+        placement: selectedPlacement,
+        region: selectedRegion,
+        tech_stack: selectedStack,
+      });
+      setProjects(data);
+    } catch {
+      setErrorMessage("Unable to reach https://podia.onrender.com. Please try again shortly.");
+    } finally {
+      setIsLoading(false);
+    }
   }, [searchQuery, selectedTrack, selectedPlacement, selectedRegion, selectedStack]);
 
   useEffect(() => {
@@ -84,22 +89,26 @@ export const App: React.FC = () => {
   // Compute dynamic list of all hackathon sectors combining defaults and indexed projects
   const availableTracks = useMemo(() => {
     const set = new Set<string>(TRACK_OPTIONS);
-    MOCK_PROJECTS.forEach((p) => {
-      if (p.track?.trim()) set.add(p.track.trim());
-    });
     projects.forEach((p) => {
       if (p.track?.trim()) set.add(p.track.trim());
     });
     return Array.from(set);
   }, [projects]);
 
-  // Compute unique sorted list of tech stack tags across available projects
+  // Compute unique sorted list of tech stack tags across live indexed projects
   const availableStacks = useMemo(() => {
     const set = new Set<string>();
-    MOCK_PROJECTS.forEach((p) => p.tech_stack.forEach((t) => set.add(t)));
     projects.forEach((p) => p.tech_stack.forEach((t) => set.add(t)));
     return Array.from(set).sort();
   }, [projects]);
+
+  // Check whether any search or filter is currently applied
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    selectedTrack !== "All" ||
+    selectedPlacement !== "All" ||
+    selectedRegion !== "All" ||
+    selectedStack !== "All";
 
   // Reset all active search queries and ribbon filters
   const handleClearAllFilters = () => {
@@ -110,25 +119,31 @@ export const App: React.FC = () => {
     setSelectedStack("All");
   };
 
-  // Handle submitting a new community winning project to the archive
+  // Handle submitting a new community winning project directly to the Render backend
   const handleCreateProject = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
+    setSubmitError(null);
     const parsedStack = stackInput
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
 
-    const { project } = await submitProject({
-      ...submitForm,
-      tech_stack: parsedStack.length > 0 ? parsedStack : ["FastAPI", "React"],
-    });
-
-    setIsSubmitting(false);
-    setIsSubmitOpen(false);
-    setSubmitForm(INITIAL_SUBMIT_FORM);
-    await loadProjects();
-    setActiveProject(project);
+    try {
+      const created = await submitProject({
+        ...submitForm,
+        tech_stack: parsedStack,
+      });
+      setIsSubmitOpen(false);
+      setSubmitForm(INITIAL_SUBMIT_FORM);
+      setStackInput("");
+      await loadProjects();
+      setActiveProject(created);
+    } catch {
+      setSubmitError("Failed to submit project to the API. Please check your inputs and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -139,7 +154,7 @@ export const App: React.FC = () => {
         onOpenSubmitModal={() => setIsSubmitOpen(true)}
       />
 
-      {/* Editorial Header Section with Inline Stats Ticker */}
+      {/* Editorial Header Section with Live Stats Ticker */}
       <section className="border-b border-[#30363d] bg-[#0d1117] px-4 py-10 sm:px-6">
         <div className="mx-auto max-w-6xl">
           <div className="max-w-3xl">
@@ -148,14 +163,16 @@ export const App: React.FC = () => {
             </h1>
 
             <p className="mt-2.5 text-sm leading-relaxed text-[#8b949e]">
-              Explore verified 1st, 2nd, and 3rd place builds across AI, Privacy, Climate, and
+              Explore winning 1st, 2nd, and 3rd place builds across AI, Privacy, Climate, and
               Health. Inspect system architecture, pitch decks, repositories, and judge takeaways.
             </p>
 
-            {/* Compact inline stats ticker integrated below hero description */}
+            {/* Compact inline stats ticker reflecting live database state */}
             <p className="mt-4 font-mono text-xs text-[#8b949e]">
-              <span className="text-[#f0f6fc]">Archiving 420+ builds</span> across{" "}
-              <span className="text-[#f0f6fc]">{availableTracks.length - 1}+ sectors</span>
+              <span className="text-[#f0f6fc]">
+                {projects.length} {projects.length === 1 ? "build" : "builds"} indexed
+              </span>{" "}
+              across <span className="text-[#f0f6fc]">{availableTracks.length - 1}+ sectors</span>
               {" · "}
               <span>1st–3rd place podiums</span>
               {" · "}
@@ -177,7 +194,7 @@ export const App: React.FC = () => {
         </div>
       </section>
 
-      {/* Single-Row Filter Ribbon (Quick Pills + Dropdowns, no duplicate search bar) */}
+      {/* Single-Row Filter Ribbon */}
       <FilterRibbon
         selectedTrack={selectedTrack}
         selectedPlacement={selectedPlacement}
@@ -199,25 +216,50 @@ export const App: React.FC = () => {
             {[1, 2, 3].map((n) => (
               <div
                 key={n}
-                className="h-64 rounded-md border border-[#30363d] bg-[#161b22] p-5"
+                className="h-64 animate-pulse rounded-md border border-[#30363d] bg-[#161b22] p-5"
               />
             ))}
+          </div>
+        ) : errorMessage ? (
+          <div className="rounded-md border border-[#30363d] bg-[#161b22] p-10 text-center">
+            <h2 className="text-sm font-medium text-[#f0f6fc]">{errorMessage}</h2>
+            <button
+              type="button"
+              onClick={loadProjects}
+              className="mt-4 rounded border border-[#f0f6fc] px-3 py-1.5 font-mono text-xs text-[#f0f6fc] transition hover:bg-[#f0f6fc] hover:text-[#0d1117]"
+            >
+              Retry Connection
+            </button>
           </div>
         ) : projects.length === 0 ? (
           <div className="rounded-md border border-[#30363d] bg-[#161b22] p-10 text-center">
             <h2 className="text-sm font-medium text-[#f0f6fc]">
-              No winning builds match these filters
+              {hasActiveFilters
+                ? "No winning builds match these filters"
+                : "No winning builds have been submitted yet"}
             </h2>
             <p className="mt-1 text-xs text-[#8b949e]">
-              Reset your active sector, placement, or stack filters to view all projects.
+              {hasActiveFilters
+                ? "Reset your active sector, placement, or stack filters to view all projects."
+                : "Be the first to index a winning hackathon project in the archive."}
             </p>
-            <button
-              type="button"
-              onClick={handleClearAllFilters}
-              className="mt-4 rounded border border-[#f0f6fc] px-3 py-1 font-mono text-xs text-[#f0f6fc] transition hover:bg-[#f0f6fc] hover:text-[#0d1117]"
-            >
-              Reset filters
-            </button>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="mt-4 rounded border border-[#f0f6fc] px-3 py-1.5 font-mono text-xs text-[#f0f6fc] transition hover:bg-[#f0f6fc] hover:text-[#0d1117]"
+              >
+                Reset filters
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsSubmitOpen(true)}
+                className="mt-4 rounded border border-[#f0f6fc] bg-[#f0f6fc] px-4 py-1.5 font-mono text-xs font-medium text-[#0d1117] transition hover:bg-[#f0f6fc]/90"
+              >
+                Submit a Win
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -239,7 +281,7 @@ export const App: React.FC = () => {
       {/* ⌘K / Ctrl+K Spotlight Command Palette */}
       <CommandPalette
         isOpen={isCommandOpen}
-        projects={MOCK_PROJECTS.length > projects.length ? MOCK_PROJECTS : projects}
+        projects={projects}
         onClose={() => setIsCommandOpen(false)}
         onSelectProject={(project) => setActiveProject(project)}
         onApplySearchQuery={(q) => setSearchQuery(q)}
@@ -266,6 +308,12 @@ export const App: React.FC = () => {
               </button>
             </div>
 
+            {submitError && (
+              <div className="mb-3 rounded border border-[#30363d] bg-[#0d1117] p-2.5 font-mono text-xs text-[#f0f6fc]">
+                {submitError}
+              </div>
+            )}
+
             <form onSubmit={handleCreateProject} className="space-y-3 text-xs">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
@@ -277,7 +325,7 @@ export const App: React.FC = () => {
                     onChange={(e) =>
                       setSubmitForm({ ...submitForm, project_name: e.target.value })
                     }
-                    placeholder="CheckMed"
+                    placeholder="Project title"
                     className="w-full rounded border border-[#30363d] bg-[#0d1117] px-3 py-1.5 text-[#f0f6fc] focus:border-[#f0f6fc] focus:outline-none"
                   />
                 </div>
@@ -290,7 +338,7 @@ export const App: React.FC = () => {
                     onChange={(e) =>
                       setSubmitForm({ ...submitForm, hackathon_name: e.target.value })
                     }
-                    placeholder="ETHGlobal 2026"
+                    placeholder="Hackathon name"
                     className="w-full rounded border border-[#30363d] bg-[#0d1117] px-3 py-1.5 text-[#f0f6fc] focus:border-[#f0f6fc] focus:outline-none"
                   />
                 </div>
@@ -306,7 +354,7 @@ export const App: React.FC = () => {
                     list="hackathon-sectors-list"
                     value={submitForm.track}
                     onChange={(e) => setSubmitForm({ ...submitForm, track: e.target.value })}
-                    placeholder="e.g., Robotics, SpaceTech"
+                    placeholder="e.g., AI/ML, Robotics"
                     className="w-full rounded border border-[#30363d] bg-[#0d1117] px-2.5 py-1.5 text-[#f0f6fc] focus:border-[#f0f6fc] focus:outline-none"
                   />
                   <datalist id="hackathon-sectors-list">

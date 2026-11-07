@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import Hackathon, Project
 from app.schemas import HackathonResponse, ProjectCreate, ProjectResponse
+from app.seed import DEMO_PROJECT_IDS
 
 router = APIRouter(prefix="/api/v1", tags=["podia"])
 
@@ -56,7 +57,12 @@ def list_projects(
     tech_stack: Optional[str] = Query(default=None, description="Filter by technology tag"),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Project).options(joinedload(Project.hackathon)).join(Hackathon)
+    query = (
+        db.query(Project)
+        .options(joinedload(Project.hackathon))
+        .join(Hackathon)
+        .filter(~Project.id.in_(DEMO_PROJECT_IDS))
+    )
 
     if q and q.strip():
         pattern = f"%{q.strip()}%"
@@ -93,7 +99,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     project = (
         db.query(Project)
         .options(joinedload(Project.hackathon))
-        .filter(Project.id == project_id)
+        .filter(Project.id == project_id, ~Project.id.in_(DEMO_PROJECT_IDS))
         .first()
     )
     if not project:

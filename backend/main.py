@@ -4,21 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router as api_router
 from app.config import settings
-from app.database import Base, SessionLocal, engine
-from app.models import Project
-from app.seed import seed_database
+from app.database import Base, engine
+from app.seed import purge_demo_data
 
 
-# Ensure tables exist and auto-seed sample projects if the database is empty on startup
+# Create database tables on startup and remove any legacy demo records
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        if db.query(Project).count() == 0:
-            seed_database()
-    finally:
-        db.close()
+    purge_demo_data()
     yield
 
 
