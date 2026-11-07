@@ -1,0 +1,31 @@
+{
+  "project_name": "CheckMed",
+  "tagline": "Offline-capable multimodal triage and prescription interaction verifier for rural clinics.",
+  "track": "Health",
+  "placement": "1st Place",
+  "problem_statement": "Rural health clinics face severe physician shortages and fragmented patient records, leading to missed adverse drug interactions and delayed triage for high-risk symptoms.",
+  "solution_summary": "CheckMed combines a React Native clinician tablet app with a FastAPI inference backend running quantized PyTorch vision and clinical NER models. Clinicians snap a photo of handwritten intake notes or pill bottles, and the pipeline cross-checks dosage conflicts in under 800ms.",
+  "key_differentiator": "Instead of wrapping a generic cloud LLM API, the team fine-tuned a compact PyTorch model on FDA drug-interaction tables and demonstrated a live offline fallback mode on a physical tablet with zero Wi-Fi.",
+  "tech_stack": [
+    "FastAPI",
+    "React Native",
+    "PyTorch",
+    "SQLite",
+    "Docker"
+  ],
+  "repo_url": "https://github.com/podia-archive/checkmed",
+  "demo_url": "https://checkmed-demo.example.dev",
+  "pitch_deck_url": "https://speakerdeck.com/podia-archive/checkmed-national-ai-1st-place",
+  "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "verification_status": "platform_verified",
+  "proof_url": "https://devpost.com/software/checkmed-ai-triage",
+  "hackathon": {
+    "name": "National AI Hackathon",
+    "slug": "national-ai-hackathon-2025",
+    "organizer": "National AI Research Consortium",
+    "year": 2025,
+    "region": "North America",
+    "website_url": "https://national-ai-hack.example.org"
+  }
+}
+
