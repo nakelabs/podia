@@ -2,13 +2,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.config import settings
+from app.config import normalize_postgres_driver_url, settings
 
 
 # Build a resilient SQLAlchemy engine for local SQLite or serverless Neon PostgreSQL
-def build_engine(database_url: str) -> Engine:
+def build_engine(raw_database_url: str) -> Engine:
+    # Ensure postgres:// and bare postgresql:// URLs explicitly target postgresql+psycopg2://
+    database_url = normalize_postgres_driver_url(raw_database_url)
+
     # Configure single-thread bypass when running against local SQLite
-    if "sqlite" in database_url:
+    if database_url.startswith("sqlite"):
         return create_engine(
             database_url,
             connect_args={"check_same_thread": False},

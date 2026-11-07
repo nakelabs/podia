@@ -3,6 +3,18 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# Rewrite postgres:// or bare postgresql:// schemes to explicitly use the psycopg2 driver
+def normalize_postgres_driver_url(value: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return "sqlite:///./podia.db"
+    url = value.strip()
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
 # Define application environment settings, Neon URL normalization, and CORS origins
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./podia.db"
@@ -17,13 +29,11 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Normalize legacy postgres:// scheme to postgresql:// for SQLAlchemy 2.0 compatibility on Render/Neon
+    # Normalize Render and Neon Postgres connection strings to postgresql+psycopg2://
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
-    def normalize_database_url(cls, value: str) -> str:
-        if isinstance(value, str) and value.strip().startswith("postgres://"):
-            return value.strip().replace("postgres://", "postgresql://", 1)
-        return value.strip() if isinstance(value, str) else "sqlite:///./podia.db"
+    def validate_database_url(cls, value: str) -> str:
+        return normalize_postgres_driver_url(value)
 
     # Parse comma-separated or JSON-formatted CORS_ORIGINS from environment variables
     @field_validator("CORS_ORIGINS", mode="before")
